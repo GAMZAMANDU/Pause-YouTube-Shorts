@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Pause-YouTube-Shorts",
+  "version": "1.0",
+  "description": "끝이 없는 유튜브 쇼츠, 다음 쇼츠로 넘어가지 못하게 합니다.",
+  "icons": {
+    "48": "icon.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://www.youtube.com/shorts/*"],
+      "js": ["content.js"]
+    }
+  ]
+}
