@@ -1,108 +1,175 @@
 (function () {
-  // 현재 URL 저장
+  const SHORTS_URL_PATTERN = "youtube.com/shorts";
+  const NAVIGATION_CONTAINER_SELECTOR = ".navigation-container";
+  const SHORTS_PLAYER_SELECTOR = "ytd-shorts";
+  const SHORTS_CONTAINER_ID = "shorts-container"; // Adjust if this ID changes
+
   let currentUrl = window.location.href;
-  
-  // 스타일 요소 생성 (한 번만 생성)
-  const style = document.createElement("style");
-  style.textContent = `
-    #shorts-container {
-      overflow: hidden !important;
-    }
-  `;
-  
-  // navigation-container 삭제 함수
-  function removeNavigationContainer() {
-    const navContainers = document.querySelectorAll(".navigation-container");
-    navContainers.forEach(container => container.remove());
-    
-    // 추가: shorts-player 내부의 스크롤 방지
-    const shortsPlayer = document.querySelector("ytd-shorts");
-    if (shortsPlayer) {
-      shortsPlayer.style.overflow = "hidden";
+  let observer = null;
+  let intervalId = null;
+  let styleElement = null;
+
+  /**
+   * Injects CSS to hide overflow and navigation buttons.
+   */
+  function injectStyles() {
+    if (styleElement && document.head.contains(styleElement)) return;
+    styleElement = document.createElement("style");
+    styleElement.textContent = `
+      #${SHORTS_CONTAINER_ID} { overflow: hidden !important; }
+      ${SHORTS_PLAYER_SELECTOR} { overflow: hidden !important; }
+      ${NAVIGATION_CONTAINER_SELECTOR} { display: none !important; }
+    `;
+    document.head.appendChild(styleElement);
+    // console.log("Braked-Shorts: Styles injected.");
+  }
+
+  /**
+   * Removes the injected CSS styles.
+   */
+  function removeStyles() {
+    if (styleElement && document.head.contains(styleElement)) {
+      document.head.removeChild(styleElement);
+      styleElement = null;
+      // console.log("Braked-Shorts: Styles removed.");
     }
   }
-  
-  // 쇼츠 페이지 처리 함수
-  function handleShortsPage() {
-    // 스타일이 아직 추가되지 않았다면 추가
-    if (!document.head.contains(style)) {
-      document.head.appendChild(style);
-    }
-    
-    // navigation-container 제거
-    removeNavigationContainer();
-    
-    // MutationObserver 설정
-    setupObserver();
-    
-    // 백업으로 interval 설정
-    if (!window.shortsIntervalId) {
-      window.shortsIntervalId = setInterval(removeNavigationContainer, 200);
+
+  /**
+   * Removes navigation container elements.
+   */
+  function removeNavigationContainers() {
+    const navContainers = document.querySelectorAll(NAVIGATION_CONTAINER_SELECTOR);
+    navContainers.forEach((container) => container.remove());
+  }
+
+  /**
+   * Prevents scrolling via ArrowUp/ArrowDown keys on Shorts.
+   */
+  function handleKeyDown(event) {
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      // console.log("Braked-Shorts: Arrow key blocked.");
+      event.preventDefault();
+      event.stopPropagation();
     }
   }
-  
-  // MutationObserver 설정 함수
+
+  /**
+   * Sets up the MutationObserver to watch for navigation containers.
+   */
   function setupObserver() {
-    // 이미 observer가 있다면 중복 설정 방지
-    if (window.shortsObserver) return;
-    
-    window.shortsObserver = new MutationObserver((mutations) => {
+    if (observer) return;
+
+    observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         if (mutation.addedNodes.length > 0) {
-          removeNavigationContainer();
+          let found = false;
+          mutation.addedNodes.forEach(node => {
+            if (node.nodeType === Node.ELEMENT_NODE &&
+                (node.matches(NAVIGATION_CONTAINER_SELECTOR) || node.querySelector(NAVIGATION_CONTAINER_SELECTOR))) {
+              found = true;
+            }
+          });
+          if (found) {
+            removeNavigationContainers();
+          }
         }
       }
     });
-    
-    // 문서 전체 관찰
-    window.shortsObserver.observe(document.documentElement, {
-      childList: true,
-      subtree: true
-    });
+
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    // console.log("Braked-Shorts: MutationObserver started.");
   }
-  
-  // URL 변경 감지 함수
-  function checkUrlChange() {
-    const newUrl = window.location.href;
-    
-    // URL이 변경되었는지 확인
-    if (newUrl !== currentUrl) {
-      currentUrl = newUrl;
-      
-      // 쇼츠 페이지인지 확인
-      if (newUrl.includes('youtube.com/shorts')) {
-        console.log("쇼츠 페이지 감지됨, 기능 활성화");
-        handleShortsPage();
-      } else {
-        // 쇼츠 페이지가 아니면 observer와 interval 정리
-        if (window.shortsObserver) {
-          window.shortsObserver.disconnect();
-          window.shortsObserver = null;
-        }
-        
-        if (window.shortsIntervalId) {
-          clearInterval(window.shortsIntervalId);
-          window.shortsIntervalId = null;
-        }
-      }
+
+  /**
+   * Disconnects the MutationObserver.
+   */
+  function disconnectObserver() {
+    if (observer) {
+      observer.disconnect();
+      observer = null;
+      // console.log("Braked-Shorts: MutationObserver stopped.");
     }
   }
-  
-  // 초기 실행
-  if (window.location.href.includes('youtube.com/shorts')) {
-    handleShortsPage();
+
+  /**
+   * Starts the interval timer to periodically remove navigation containers.
+   */
+  function startInterval() {
+    if (intervalId) return;
+    removeNavigationContainers(); // Initial removal
+    intervalId = setInterval(removeNavigationContainers, 300);
+    // console.log("Braked-Shorts: Removal interval started.");
   }
-  
-  // URL 변경 감지 interval 설정 (YouTube의 히스토리 API 변경 감지용)
-  setInterval(checkUrlChange, 500);
-  
-  // 히스토리 API 후킹 (YouTube의 pushState 감지)
+
+  /**
+   * Stops the interval timer.
+   */
+  function stopInterval() {
+    if (intervalId) {
+      clearInterval(intervalId);
+      intervalId = null;
+      // console.log("Braked-Shorts: Removal interval stopped.");
+    }
+  }
+
+  /**
+   * Activates all features for the Shorts page.
+   */
+  function activateShortsFeatures() {
+    // console.log("Braked-Shorts: Activating features for Shorts page.");
+    injectStyles();
+    document.addEventListener("keydown", handleKeyDown, true); // Use capture phase
+    setupObserver();
+    startInterval(); // Use interval as a backup/aggressive removal
+  }
+
+  /**
+   * Deactivates all features when leaving the Shorts page.
+   */
+  function deactivateShortsFeatures() {
+    // console.log("Braked-Shorts: Deactivating features.");
+    document.removeEventListener("keydown", handleKeyDown, true);
+    disconnectObserver();
+    stopInterval();
+    removeStyles();
+  }
+
+  /**
+   * Checks the current URL and activates/deactivates features accordingly.
+   */
+  function checkUrlAndApplyFeatures() {
+    const newUrl = window.location.href;
+    if (newUrl === currentUrl) return; // No change
+
+    currentUrl = newUrl;
+    const isOnShortsPage = newUrl.includes(SHORTS_URL_PATTERN);
+
+    if (isOnShortsPage) {
+      activateShortsFeatures();
+    } else {
+      deactivateShortsFeatures();
+    }
+  }
+
+  // --- Initialization ---
+
+  // Initial check
+  if (window.location.href.includes(SHORTS_URL_PATTERN)) {
+    activateShortsFeatures();
+  }
+
+  // Monitor URL changes via interval
+  setInterval(checkUrlAndApplyFeatures, 500);
+
+  // Monitor SPA navigation
   const originalPushState = history.pushState;
-  history.pushState = function() {
+  history.pushState = function () {
     originalPushState.apply(this, arguments);
-    checkUrlChange();
+    setTimeout(checkUrlAndApplyFeatures, 100); // Delay to allow DOM updates
   };
-  
-  // popstate 이벤트 리스너 (뒤로가기/앞으로가기 감지)
-  window.addEventListener('popstate', checkUrlChange);
+  window.addEventListener("popstate", checkUrlAndApplyFeatures);
+
+  console.log("Braked-Shorts: Content script loaded.");
+
 })();
