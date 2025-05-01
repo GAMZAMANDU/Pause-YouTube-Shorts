@@ -6,9 +6,16 @@
   "icons": {
     "48": "icon.png"
   },
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://*.youtube.com/*"
+  ],
   "content_scripts": [
     {
-      "matches": ["*://www.youtube.com/shorts/*"],
+      "matches": ["*://*.youtube.com/shorts/*"],
       "js": ["content.js"]
     }
   ]
